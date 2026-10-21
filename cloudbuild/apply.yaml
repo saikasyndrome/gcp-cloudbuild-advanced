@@ -1,0 +1,65 @@
+steps:
+  - id: "terraform-init"
+    name: "hashicorp/terraform:1.9"
+    entrypoint: "sh"
+    env:
+      - "GOOGLE_IMPERSONATE_SERVICE_ACCOUNT=${_TF_SA}"
+    args:
+      - "-c"
+      - |
+        echo "=== Terraform Apply ==="
+        echo "dir: ${_PROJECT_DIR}"
+        echo "impersonate: ${_TF_SA}"
+        cd ${_PROJECT_DIR}
+        terraform fmt -check -diff
+        terraform init -reconfigure
+        terraform validate
+
+  - id: "tflint"
+    name: "ghcr.io/terraform-linters/tflint"
+    entrypoint: "sh"
+    args:
+      - "-c"
+      - |
+        cd ${_PROJECT_DIR}
+        tflint --init
+        tflint --format=compact
+
+  - id: "terraform-plan"
+    name: "hashicorp/terraform:1.9"
+    entrypoint: "sh"
+    env:
+      - "GOOGLE_IMPERSONATE_SERVICE_ACCOUNT=${_TF_SA}"
+    args:
+      - "-c"
+      - |
+        cd ${_PROJECT_DIR}
+        terraform init -reconfigure
+        terraform plan -input=false -out=tfplan
+
+  - id: "terraform-apply"
+    name: "hashicorp/terraform:1.9"
+    entrypoint: "sh"
+    env:
+      - "GOOGLE_IMPERSONATE_SERVICE_ACCOUNT=${_TF_SA}"
+    args:
+      - "-c"
+      - |
+        cd ${_PROJECT_DIR}
+        terraform apply -auto-approve tfplan
+
+  - id: "drift-check"
+    name: "hashicorp/terraform:1.9"
+    entrypoint: "sh"
+    env:
+      - "GOOGLE_IMPERSONATE_SERVICE_ACCOUNT=${_TF_SA}"
+    args:
+      - "-c"
+      - |
+        cd ${_PROJECT_DIR}
+        terraform plan -detailed-exitcode -input=false
+
+timeout: 2400s
+options:
+  logging: CLOUD_LOGGING_ONLY
+  defaultLogsBucketBehavior: "REGIONAL_USER_OWNED_BUCKET"

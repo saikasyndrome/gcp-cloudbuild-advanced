@@ -1,0 +1,82 @@
+steps:
+  - id: "setup-tfcmt"
+    name: "gcr.io/cloud-builders/gcloud"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        curl -fsSL -o /workspace/tfcmt.tar.gz \
+          "https://github.com/suzuki-shunsuke/tfcmt/releases/download/${_TFCMT_VER}/tfcmt_linux_amd64.tar.gz"
+        tar xzf /workspace/tfcmt.tar.gz -C /workspace
+        chmod +x /workspace/tfcmt
+
+  - id: "terraform-init"
+    name: "hashicorp/terraform:1.9"
+    entrypoint: "sh"
+    env:
+      - "GOOGLE_IMPERSONATE_SERVICE_ACCOUNT=${_TF_SA}"
+    args:
+      - "-c"
+      - |
+        echo "=== Terraform Plan ==="
+        echo "dir: ${_PROJECT_DIR}"
+        echo "impersonate: ${_TF_SA}"
+        cd ${_PROJECT_DIR}
+        terraform fmt -check -diff
+        terraform init -reconfigure
+        terraform validate
+
+  - id: "tflint"
+    name: "ghcr.io/terraform-linters/tflint"
+    entrypoint: "sh"
+    args:
+      - "-c"
+      - |
+        cd ${_PROJECT_DIR}
+        tflint --init
+        tflint --format=compact
+
+  - id: "trivy"
+    name: "aquasec/trivy"
+    entrypoint: "trivy"
+    args:
+      - "config"
+      - "--exit-code"
+      - "0"
+      - "--severity"
+      - "HIGH,CRITICAL"
+      - "--format"
+      - "table"
+      - "${_PROJECT_DIR}"
+
+  - id: "terraform-plan"
+    name: "hashicorp/terraform:1.9"
+    entrypoint: "sh"
+    secretEnv: ["GITHUB_TOKEN"]
+    env:
+      - "GOOGLE_IMPERSONATE_SERVICE_ACCOUNT=${_TF_SA}"
+    args:
+      - "-c"
+      - |
+        export PATH="/workspace:$$PATH"
+        export GITHUB_TOKEN=$$GITHUB_TOKEN
+        cd ${_PROJECT_DIR}
+        terraform init -reconfigure
+        tfcmt \
+          -owner ${_OWNER} \
+          -repo ${_REPO} \
+          -pr $_PR_NUMBER \
+          -var "target:${_PROJECT_DIR}" \
+          plan -skip-no-changes -patch -- \
+          terraform plan -input=false -out=tfplan
+
+# Replace demo-cicd-control with your control project ID
+availableSecrets:
+  secretManager:
+    - versionName: projects/demo-cicd-control/secrets/GITHUB_TOKEN/versions/latest
+      env: "GITHUB_TOKEN"
+
+timeout: 1200s
+options:
+  logging: CLOUD_LOGGING_ONLY
+  defaultLogsBucketBehavior: "REGIONAL_USER_OWNED_BUCKET"

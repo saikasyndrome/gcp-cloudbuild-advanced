@@ -1,0 +1,10 @@
+control_project_id         = "demo-cicd-control"
+region                     = "asia-northeast1"
+github_owner               = "saikasyndrome"
+github_repo                = "gcp-cloudbuild-advanced"
+github_app_installation_id = 00000000
+github_oauth_secret_id     = "github-oauth-token"
+tfstate_bucket             = "demo-cicd-control-tfstate"
+
+# Progressive rollout: start with ["dev"], then add "prd"
+enabled_envs = ["dev"]
